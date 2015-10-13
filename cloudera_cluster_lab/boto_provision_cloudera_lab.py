@@ -8,6 +8,10 @@ Improvements:
 			- Change to enable one-shoot Full Datacenter Provision (currently is several steps, to provision VPC + Subnets, and only after ec2 instances) 
 			- Include Fabric/Ansible to provision the code in the VMs + provision more than one disk per hadoop node
 Authors: Diogo
+Resources:
+Hadoop: http://archive.cloudera.com/cdh5/cdh/5/hadoop/hadoop-yarn/hadoop-yarn-site/YARN.html
+Cloudera_Manager install: http://www.cloudera.com/content/cloudera/en/documentation/core/latest/topics/cm_ig_install_path_a.html
+CDH5 install: http://www.cloudera.com/content/cloudera/en/documentation/core/latest/topics/cdh_ig_cdh5_install.html
 
 """
 
@@ -30,8 +34,8 @@ else:
 my_env = "test"
 
 #REGION NAME
-#region = 'eu-central-1' 
-region = 'eu-west-1' 
+region = 'eu-central-1' 
+#region = 'eu-west-1' 
 
 #NOTE: for this region only AVZ: A & B available currently!
 
@@ -41,7 +45,7 @@ bsd_vpcs = {
 		'name': 'berlin_smart_data_vpc',
 		'cidr_block': '172.16.0.0/16',
 		'key': 'bsd_labs',
-		'ami': 'ami-b05101c7',
+		'ami': 'ami-b05101c7', #Ubuntu 14.04 LTS (PV), trusty
 		'subnets': {
 					'A': {
 						'id': 'subnet-c9eaa8be', 'cidr_block': '172.16.5.0/24', 'availability_zone': region+'a' 
@@ -59,7 +63,7 @@ bsd_vpcs = {
 		'name': 'berlin_smart_data_vpc',
 		'cidr_block': '172.16.0.0/16',
 		'key': 'bsd_labs_eu_central_1',
-		'ami': 'ami-b6cff2ab',
+		'ami': 'ami-b6cff2ab', #Ubuntu 14.04 LTS (PV), trusty
 		'subnets': {
 					'A': {
 						'id': 'subnet-2d33bd44', 'cidr_block': '172.16.5.0/24', 'availability_zone': region+'a' 
@@ -81,14 +85,12 @@ my_subnets =  bsd_vpcs[region]['subnets']
 ###REMINDER: do NOT forget to make sure you HAVE the SSH KEY that you specify...
 
 ec2Group = collections.namedtuple("ec2Group", [ "name", "additional_info", "id", "image_id", "key_name", "instance_type", "security_groups", "subnet_id", "region", "private_ip_address", "monitoring_enabled", "disable_api_termination", "volumes" ])
-#NOTE - running out of time side-effects/gotchas: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID + check AMI specific for Region: https://cloud-images.ubuntu.com/locator/ec2/
-#For region eu-west-1: ami => ami-b05101c7, Ubuntu 14.04 LTS (PV), trusty
-#For region eu-central-1: ami => ami-b6cff2ab, Ubuntu 14.04 LTS (PV), trusty
+#NOTE - running out of time side-effects/gotchas: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID
 
 ec2Instances = [ 
-				ec2Group('Cloudera_Manager', 'Cloudera Manager', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10', False, False,  [50]), # Ubuntu 14.04, x64, eu-west-1			
-				ec2Group('Cloudera_Node_1', 'Node 1', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100', False, False, [60]), # Ubuntu 14.04, x64, eu-west-1
-				ec2Group('Cloudera_Node_2', 'Node 2', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101', False, False, [60]) # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('Cloudera_Manager', 'Cloudera Manager', 'new', bsd_vpcs[region]['ami'], bsd_vpcs[region]['key'], 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10', False, False,  [50]), # Ubuntu 14.04, x64, eu-west-1			
+				ec2Group('Cloudera_Node_1', 'Node 1', 'new', bsd_vpcs[region]['ami'], bsd_vpcs[region]['key'], 'm3.large', 'bsd_hadoop_nodes', my_subnets['A']['id'], region, '172.16.5.100', False, False, [60]), # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('Cloudera_Node_2', 'Node 2', 'new', bsd_vpcs[region]['ami'], bsd_vpcs[region]['key'], 'm3.large', 'bsd_hadoop_nodes', my_subnets['A']['id'], region, '172.16.5.101', False, False, [60]) # Ubuntu 14.04, x64, eu-west-1
 				]
 
 #SECURITY GROUPS
@@ -104,6 +106,7 @@ CLOUDERA_RULES = [
     SecurityGroupRule("tcp", "7432", "7432", my_vpc['cidr_block'], "bsd_cloudera_manager"), #Embedded Postgres
     SecurityGroupRule("icmp", "-1", "-1", my_vpc['cidr_block'], "bsd_cloudera_manager"), #Ping echo
 ]
+#http://www.cloudera.com/content/cloudera/en/documentation/cdh5/v5-0-0/CDH5-Installation-Guide/cdh5ig_ports_cdh5.html
 HADOOP_RULES = [
 		SecurityGroupRule("tcp", "22", "22", "0.0.0.0/0", "bsd_hadoop_nodes"),
 		SecurityGroupRule("tcp", "50070", "50070", "0.0.0.0/0", "bsd_hadoop_nodes"), # NameNode webUI 
