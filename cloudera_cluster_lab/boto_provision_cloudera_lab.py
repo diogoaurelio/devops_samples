@@ -3,7 +3,10 @@
 Version: 0.1
 Description: Basic Recipe for provisioning AWS EC2 instances for a Cloudera Cluster lab.
 Notes: make sure you have VPC and subnets provisioned before you provision ec2 instances
-Improvements: Include Fabric/Ansible to provision the code in the VMs + provision more than one disk per hadoop node
+Improvements: 
+			- Provision Internet Gateway with VPC + as well as Route for Internet - http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Scenario1.html; 
+			- Change to enable one-shoot Full Datacenter Provision (currently is several steps, to provision VPC + Subnets, and only after ec2 instances) 
+			- Include Fabric/Ansible to provision the code in the VMs + provision more than one disk per hadoop node
 Authors: Diogo
 
 """
@@ -368,7 +371,7 @@ def provision_vpc(env, vpc):
 	else:
 		print "vpc already exists, nothing to do here, moving on to subnets.."
 		provision_subnets(env, vpc, my_vpc['id'], existing_subnets)
-	
+	#TODO: provision internet gateway for VPC! http://docs.aws.amazon.com/AmazonVPC/latest/UserGuide/VPC_Scenario1.html
 	
 
 def provision_subnets(env, vpc, vpc_id, existing_subnets):
