@@ -27,21 +27,50 @@ else:
 my_env = "test"
 
 #REGION NAME
-region = 'eu-central-1'
+#region = 'eu-central-1' 
+region = 'eu-west-1' 
 
 #NOTE: for this region only AVZ: A & B available currently!
 
-my_vpc = { 'id' : 'vpc-17eb537e', 'name': 'berlin_smart_data_vpc', 'cidr_block': '172.16.0.0/16' }
-my_subnets = { 'A': {
-				'id': 'subnet-2d33bd44', 'cidr_block': '172.16.5.0/24', 'availability_zone': region+'a' 
-				},
-				'B': {
-				'id': 'subnet-0f1cb374', 'cidr_block': '172.16.15.0/24', 'availability_zone': region+'b' 
-				},
-				#'C': {
-				#'id': 'new', 'cidr_block': '172.16.25.0/24', 'availability_zone': region+'c' 
-				#}
-			 } 
+bsd_vpcs = { 
+	'eu-west-1': {
+		'vpc_id': 'vpc-907007f5',
+		'name': 'berlin_smart_data_vpc',
+		'cidr_block': '172.16.0.0/16',
+		'key': 'bsd_labs',
+		'ami': 'ami-b05101c7',
+		'subnets': {
+					'A': {
+						'id': 'subnet-c9eaa8be', 'cidr_block': '172.16.5.0/24', 'availability_zone': region+'a' 
+					},
+					'B': {
+						'id': 'subnet-4bdcb812', 'cidr_block': '172.16.15.0/24', 'availability_zone': region+'b' 
+					},
+					'C': {
+						'id': 'subnet-d56246b0', 'cidr_block': '172.16.25.0/24', 'availability_zone': region+'c' 
+					}			  
+		}	
+	},
+	'eu-central-1': {
+		'vpc_id': 'vpc-17eb537e',
+		'name': 'berlin_smart_data_vpc',
+		'cidr_block': '172.16.0.0/16',
+		'key': 'bsd_labs_eu_central_1',
+		'ami': 'ami-b6cff2ab',
+		'subnets': {
+					'A': {
+						'id': 'subnet-2d33bd44', 'cidr_block': '172.16.5.0/24', 'availability_zone': region+'a' 
+					},
+					'B': {
+						'id': 'subnet-0f1cb374', 'cidr_block': '172.16.15.0/24', 'availability_zone': region+'b' 
+					}			  
+			}	
+	} 
+
+	}
+my_vpc = { 'id' : bsd_vpcs[region]['vpc_id'], 'name': bsd_vpcs[region]['name'], 'cidr_block': bsd_vpcs[region]['cidr_block'] }
+
+my_subnets =  bsd_vpcs[region]['subnets']
 
 
 #EC2 INSTANCE VARS
@@ -49,13 +78,14 @@ my_subnets = { 'A': {
 ###REMINDER: do NOT forget to make sure you HAVE the SSH KEY that you specify...
 
 ec2Group = collections.namedtuple("ec2Group", [ "name", "additional_info", "id", "image_id", "key_name", "instance_type", "security_groups", "subnet_id", "region", "private_ip_address", "monitoring_enabled", "disable_api_termination", "volumes" ])
-#NOTE - laziness side-effects gotchas: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID + check AMI specific for Region: https://cloud-images.ubuntu.com/locator/ec2/
+#NOTE - running out of time side-effects/gotchas: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID + check AMI specific for Region: https://cloud-images.ubuntu.com/locator/ec2/
 #For region eu-west-1: ami => ami-b05101c7, Ubuntu 14.04 LTS (PV), trusty
+#For region eu-central-1: ami => ami-b6cff2ab, Ubuntu 14.04 LTS (PV), trusty
 
 ec2Instances = [ 
-				ec2Group('Cloudera_Manager', 'Cloudera Manager', 'new', 'ami-b6cff2ab', 'bsd_labs_eu_central_1', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10', False, False,  [50]), # Ubuntu 14.04, x64, eu-west-1			
-				ec2Group('Cloudera_Node_1', 'Node 1', 'new', 'ami-b6cff2ab', 'bsd_labs_eu_central_1', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100', False, False, [60]), # Ubuntu 14.04, x64, eu-west-1
-				ec2Group('Cloudera_Node_2', 'Node 2', 'new', 'ami-b6cff2ab', 'bsd_labs_eu_central_1', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101', False, False, [60]) # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('Cloudera_Manager', 'Cloudera Manager', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10', False, False,  [50]), # Ubuntu 14.04, x64, eu-west-1			
+				ec2Group('Cloudera_Node_1', 'Node 1', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100', False, False, [60]), # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('Cloudera_Node_2', 'Node 2', 'new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101', False, False, [60]) # Ubuntu 14.04, x64, eu-west-1
 				]
 
 #SECURITY GROUPS
@@ -67,9 +97,9 @@ CLOUDERA_RULES = [
     SecurityGroupRule("tcp", "22", "22", "0.0.0.0/0", "bsd_cloudera_manager"),
     SecurityGroupRule("tcp", "7180", "7180", "0.0.0.0/0", "bsd_cloudera_manager"), # Cloudera Manager web console
     SecurityGroupRule("tcp", "7183", "7183", "0.0.0.0/0", "bsd_cloudera_manager"), #Optional web console access via TLS
-    SecurityGroupRule("tcp", "7182", "7182", "172.16.0.0/16", "bsd_cloudera_manager"), # Agent heartbeat
-    SecurityGroupRule("tcp", "7432", "7432", "172.16.0.0/16", "bsd_cloudera_manager"), #Embedded Postgres
-    SecurityGroupRule("icmp", "-1", "-1", "172.16.0.0/16", "bsd_cloudera_manager"), #Ping echo
+    SecurityGroupRule("tcp", "7182", "7182", my_vpc['cidr_block'], "bsd_cloudera_manager"), # Agent heartbeat
+    SecurityGroupRule("tcp", "7432", "7432", my_vpc['cidr_block'], "bsd_cloudera_manager"), #Embedded Postgres
+    SecurityGroupRule("icmp", "-1", "-1", my_vpc['cidr_block'], "bsd_cloudera_manager"), #Ping echo
 ]
 HADOOP_RULES = [
 		SecurityGroupRule("tcp", "22", "22", "0.0.0.0/0", "bsd_hadoop_nodes"),
@@ -331,6 +361,8 @@ def provision_vpc(env, vpc):
 	if not vpc_to_prov:
 		print "Starting new VPC provisioning process.."
 		new_vpc = vpc.create_vpc(my_vpc['cidr_block'], dry_run = dryRun)
+		#TODO: TEST THIS: 
+		modify_vpc_attribute(vpc_id=new_vpc.id, enable_dns_hostnames=True, dry_run = dryRun)
 		print "New VPC provisioned, please update its ID: " +str(new_vpc.id)
 		provision_subnets(env, vpc, new_vpc.id, existing_subnets)
 	else:
