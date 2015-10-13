@@ -7,9 +7,10 @@ Authors: Diogo
 
 """
 
-import boto, boto.ec2, boto.vpc
+import boto, boto.ec2, boto.vpc, boto.ec2.networkinterface
 import collections
 import sys
+import time
 
 if sys.version < "3":
     from urllib2 import urlopen, Request, HTTPError
@@ -44,12 +45,12 @@ my_subnets = { 'A': {
 
 ###REMINDER: do NOT forget to make sure you HAVE the SSH KEY that you specify...
 
-ec2Group = collections.namedtuple("ec2Group", [ "id", "image_id", "key_name", "instance_type", "security_groups", "subnet_id", "region", "private_ip_address", "monitoring_enabled", "disable_api_termination", "additional_info", "volumes" ])
+ec2Group = collections.namedtuple("ec2Group", [ "id", "image_id", "key_name", "instance_type", "security_groups", "subnet_id", "region", "private_ip_address", "monitoring_enabled", "disable_api_termination", "name", "additional_info", "volumes" ])
 #NOTE: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID (yes, lazzyness sometimes good..)
 ec2Instances = [ 
-				ec2Group('i-46de46ff', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10/24', 'False', 'False', 'Cloudera Manager', [50]), # Ubuntu 14.04, x64, eu-west-1			
-				ec2Group('i-42d048fb', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100/24', 'False', 'False', 'Node 1', [60]), # Ubuntu 14.04, x64, eu-west-1
-				ec2Group('i-861fd73e', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101/24', 'False', 'False', 'Node 2', [60]) # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10/24', False, False, 'Cloudera_Manager', 'Cloudera Manager', [50]), # Ubuntu 14.04, x64, eu-west-1			
+				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100/24', False, False, 'Cloudera_Node_1', 'Node 1', [60]), # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101/24', False, False, 'Cloudera_Node_2', 'Node 2', [60]) # Ubuntu 14.04, x64, eu-west-1
 				]
 
 #SECURITY GROUPS
@@ -256,6 +257,7 @@ def create_ec2_instance(env, conn, vpc, ec2Group):
 			if len(ec2.volumes) <= 1: #instance has only one volume
 				#TODO - specify that disk should be deleted on instance termination
 				dev_sda1.size = ec2.volumes[0]
+				dev_sda1.delete_on_termination=True
 				bdm = boto.ec2.blockdevicemapping.BlockDeviceMapping()
 				bdm['/dev/sda1'] = dev_sda1
 			#TODO increment number of disks provisioned:
@@ -264,11 +266,35 @@ def create_ec2_instance(env, conn, vpc, ec2Group):
 			# 		conn.attach_volume (vol.id, inst.id, "/dev/sdx")
 			sg_id = [ sg.id for sg in vpc.get_all_security_groups() if sg.name == ec2.security_groups ]
 			if len(sg_id) > 0:
+				interface = boto.ec2.networkinterface.NetworkInterfaceSpecification(subnet_id = ec2.subnet_id, groups= sg_id, associate_public_ip_address = True)
+				interfaces = boto.ec2.networkinterface.NetworkInterfaceCollection(interface)
 				print "Creating new ec2 instance - " + str(ec2)
 				try:
-					new_ec2 = conn.run_instances( ec2.image_id , key_name=ec2.key_name, instance_type=ec2.instance_type, security_group_ids=[sg_id[0]], subnet_id = ec2.subnet_id, monitoring_enabled=ec2.monitoring_enabled, disable_api_termination= ec2.disable_api_termination, additional_info=ec2.additional_info, block_device_map =bdm, dry_run = dryRun)
+					new_ec2 = conn.run_instances( image_id= ec2.image_id , 
+												key_name=ec2.key_name, 
+												instance_type=ec2.instance_type, 
+												#the following two arguments are provided in the network_interface
+                                				#instead at the global level !!
+												#security_group_ids=sg_id, 
+												#subnet_id = ec2.subnet_id, 
+												monitoring_enabled=ec2.monitoring_enabled, 
+												disable_api_termination= ec2.disable_api_termination, 
+												additional_info=ec2.additional_info, 
+												block_device_map =bdm, 
+												dry_run = dryRun)
 					if new_ec2:
-						new_instaces_ids[ new_ec2.id ] = ec2.additional_info
+						instance = new_ec2.instances[0]
+						instance.update()
+						while instance.state == 'pending':
+							print instance, instance.state
+							time.sleep(5)
+							instance.update()
+						if instance.state != 'failed':
+							new_instaces_ids[ new_ec2.id ] = ec2.additional_info
+							instance.add_tag(ec2.name, ec2.additional_info)
+						else:
+							print "There was a problem, and instance could not be created.."
+							print Instance
 				except Exception, e:
 					print e
 				
@@ -343,7 +369,7 @@ def boostrapper(env):
 	#Fire new ec2 instances
 	print "Current ec2 instances:"
 	list_all_ec2_instances(env, conn)
-	create_ec2_instance(env, conn, vpc, ec2Instances)
+	create_ec2_instance("production", conn, vpc, ec2Instances)
 
 
 if __name__=="__main__":
