@@ -7,11 +7,17 @@ Authors: Diogo
 
 """
 
-import boto
-import boto.ec2
-import boto.vpc
-
+import boto, boto.ec2, boto.vpc
 import collections
+import sys
+
+if sys.version < "3":
+    from urllib2 import urlopen, Request, HTTPError
+else:
+    from urllib.request import urlopen, Request
+    from urllib.error import HTTPError
+    raw_input = input
+    xrange = range
 
 ############################################## CHANGE THESE VARIABLES HERE TO CHANGE THE SCRIPT #######################################################
 
@@ -41,9 +47,9 @@ my_subnets = { 'A': {
 ec2Group = collections.namedtuple("ec2Group", [ "id", "image_id", "key_name", "instance_type", "security_groups", "subnet_id", "region", "private_ip_address", "monitoring_enabled", "disable_api_termination", "additional_info", "volumes" ])
 #NOTE: PAY ATTENTION TO SUBNET STATICALLY ASSIGNED MATCHES SUBNET ID (yes, lazzyness sometimes good..)
 ec2Instances = [ 
-				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10/24', 'False', 'False', 'Cloudera Manager', [50]), # Ubuntu 14.04, x64, eu-west-1			
-				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100/24', 'False', 'False', 'Node 1', [60]), # Ubuntu 14.04, x64, eu-west-1
-				ec2Group('new', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101/24', 'False', 'False', 'Node 2', [60]) # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('i-46de46ff', 'ami-b05101c7', 'bsd_labs', 'm3.medium', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.10/24', 'False', 'False', 'Cloudera Manager', [50]), # Ubuntu 14.04, x64, eu-west-1			
+				ec2Group('i-42d048fb', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['A']['id'], region, '172.16.5.100/24', 'False', 'False', 'Node 1', [60]), # Ubuntu 14.04, x64, eu-west-1
+				ec2Group('i-861fd73e', 'ami-b05101c7', 'bsd_labs', 'm3.large', 'bsd_cloudera_manager', my_subnets['B']['id'], region, '172.16.15.101/24', 'False', 'False', 'Node 2', [60]) # Ubuntu 14.04, x64, eu-west-1
 				]
 
 #SECURITY GROUPS
@@ -89,11 +95,15 @@ my_security_group = [
 
 
 def get_or_create_security_group(env, vpc, security_groups, group_name, description=""):
-    """
-    	Checks from the already existing groups if there is or not intended SG; if not, and env != test, then create new SG
-    	@vpc - connection object to aws
-    	@sg = security group
-    	description - description to add on sg in case of creation
+    """ Checks from the already existing groups if there is or not intended SG; if not, and env != test, then create new SG
+    	args:
+    		@env - control var imposed to decide which parts should do dry-run 
+    		@vpc - connection object to vpc in aws
+    		@security_groups - List of already existing security groups 
+    		@group_name - specific Group Name to test if already exists or not
+    		@description - optional Group description
+    	returns:
+    		@group object created
     """
     dryRun = True
     if env != "test":
@@ -119,6 +129,15 @@ def get_or_create_security_group(env, vpc, security_groups, group_name, descript
 
 
 def modify_sg(env, c, group, rule, authorize=False, revoke=False):
+    """ Method to modify an Security Group Rules (revoke old ones, authorize new ones)
+    	args:
+    		@env - control var imposed to decide which parts should do dry-run 
+    		@c - connection object to aws
+    		@group - specific Group to change
+    		@description - optional Group description
+    	returns:
+    		@void
+    """
     dryRun = True
     if env != "test":
     	dryRun = False
@@ -235,6 +254,7 @@ def create_ec2_instance(env, conn, vpc, ec2Group):
 		if ec2.id == "new":
 			dev_sda1 = boto.ec2.blockdevicemapping.EBSBlockDeviceType()
 			if len(ec2.volumes) <= 1: #instance has only one volume
+				#TODO - specify that disk should be deleted on instance termination
 				dev_sda1.size = ec2.volumes[0]
 				bdm = boto.ec2.blockdevicemapping.BlockDeviceMapping()
 				bdm['/dev/sda1'] = dev_sda1
@@ -256,10 +276,11 @@ def create_ec2_instance(env, conn, vpc, ec2Group):
 				print "Could not provision ec2 instance %s because SG %s does not exist! (tip: maybe its creation failed!)" % (str(ec2), ec2.security_groups)
 
 	if bool(new_instaces_ids):
-			print "No new instances were provisioned. Alright, job completed!!"
-	else:
 		print "Alright, job finished, but you still have work to do!! New instances IDs to upodate"
 		print new_instaces_ids
+			
+	else:
+		print "No new instances were provisioned. Alright, job completed!!"
 
 def networking(env, vpc):
 	dryRun = True
